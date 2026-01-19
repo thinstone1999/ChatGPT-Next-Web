@@ -42,6 +42,7 @@ const TrafficPage: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState<number>(
     new Date().getFullYear(),
   ); // 当前年份
+  const [viewMode, setViewMode] = useState<"month" | "year">("month"); // 视图模式：月度或年度
   const [trafficData, setTrafficData] = useState<TrafficData[]>([]);
   const [dailyAmounts, setDailyAmounts] = useState<number[]>([]); // 每日汇总数据
   const [categoryTotals, setCategoryTotals] = useState<{
@@ -50,7 +51,6 @@ const TrafficPage: React.FC = () => {
   const [categoryDailyData, setCategoryDailyData] = useState<{
     [key: string]: number[];
   }>({}); // 每个类别每日的数据
-  const [totalAmount, setTotalAmount] = useState<number>(0); // 总量
 
   // 月份名称映射
   const monthNames = [
@@ -89,53 +89,90 @@ const TrafficPage: React.FC = () => {
 
   // 根据选择的年月过滤和聚合数据
   useEffect(() => {
-    // 过滤指定年月的数据
-    const filteredData = trafficData.filter((item) => {
-      const [year, month] = item.date.split("-").map(Number);
-      return year === selectedYear && month === selectedMonth;
-    });
+    if (viewMode === "month") {
+      // 月度视图：过滤指定年月的数据
+      const filteredData = trafficData.filter((item) => {
+        const [year, month] = item.date.split("-").map(Number);
+        return year === selectedYear && month === selectedMonth;
+      });
 
-    // 获取当月天数
-    const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
+      // 由于现在数据是按月存储的，我们只需要计算总量
+      const monthlyTotal = filteredData.reduce(
+        (sum, item) => sum + item.amount,
+        0,
+      );
 
-    // 初始化每日数据数组
-    const dailyData = new Array(daysInMonth).fill(0);
+      // 初始化月度数据数组（这里我们只有一个数据点，代表整个月的总量）
+      const monthlyData = [monthlyTotal];
 
-    // 按类别聚合数据
-    const categoryData: { [key: string]: number } = {};
+      // 按类别聚合数据
+      const categoryData: { [key: string]: number } = {};
 
-    // 初始化每个类别的每日数据数组
-    const categoryDailyData: { [key: string]: number[] } = {};
+      // 初始化每个类别的月度数据数组
+      const categoryMonthlyData: { [key: string]: number[] } = {};
 
-    // 按日期聚合数据
-    filteredData.forEach((item) => {
-      const dateParts = item.date.split("-");
-      const day = parseInt(dateParts[2], 10);
-      if (day >= 1 && day <= daysInMonth) {
-        dailyData[day - 1] += item.amount; // 累加当天的总流量
-
-        // 初始化类别每日数据数组
-        if (!categoryDailyData[item.category]) {
-          categoryDailyData[item.category] = new Array(daysInMonth).fill(0);
+      // 按类别聚合数据
+      filteredData.forEach((item) => {
+        // 累加对应类别的月度流量
+        if (!categoryMonthlyData[item.category]) {
+          categoryMonthlyData[item.category] = [0]; // 每个类别只包含一个月的数据
         }
+        categoryMonthlyData[item.category][0] += item.amount;
 
-        // 累加对应类别的当日流量
-        categoryDailyData[item.category][day - 1] += item.amount;
-      }
+        // 按类别累加
+        if (categoryData[item.category]) {
+          categoryData[item.category] += item.amount;
+        } else {
+          categoryData[item.category] = item.amount;
+        }
+      });
 
-      // 按类别累加
-      if (categoryData[item.category]) {
-        categoryData[item.category] += item.amount;
-      } else {
-        categoryData[item.category] = item.amount;
-      }
-    });
+      setDailyAmounts(monthlyData); // 重用状态变量，但现在存储的是月度数据
+      setCategoryTotals(categoryData);
+      setCategoryDailyData(categoryMonthlyData); // 重用状态变量，但现在存储的是月度数据
+    } else if (viewMode === "year") {
+      // 年度视图：聚合整个年度的数据，按月显示
+      const monthlyData: number[] = Array(12).fill(0); // 一年12个月
+      const categoryMonthlyData: { [key: string]: number[] } = {}; // 每个类别按月的数据
 
-    setDailyAmounts(dailyData);
-    setCategoryTotals(categoryData);
-    setCategoryDailyData(categoryDailyData);
-    setTotalAmount(filteredData.reduce((sum, item) => sum + item.amount, 0));
-  }, [trafficData, selectedMonth, selectedYear]);
+      // 按类别聚合数据
+      const categoryData: { [key: string]: number } = {};
+
+      // 遍历当年的所有数据
+      trafficData.forEach((item) => {
+        const [year, monthStr] = item.date.split("-");
+        const yearNum = Number(year);
+        const monthNum = Number(monthStr);
+
+        // 只处理选定年份的数据
+        if (yearNum === selectedYear) {
+          const monthIndex = monthNum - 1; // 月份索引从0开始
+
+          // 累加到对应月份
+          monthlyData[monthIndex] += item.amount;
+
+          // 初始化类别月度数据数组
+          if (!categoryMonthlyData[item.category]) {
+            categoryMonthlyData[item.category] = Array(12).fill(0);
+          }
+
+          // 累加对应类别的月度流量
+          categoryMonthlyData[item.category][monthIndex] += item.amount;
+
+          // 按类别累加
+          if (categoryData[item.category]) {
+            categoryData[item.category] += item.amount;
+          } else {
+            categoryData[item.category] = item.amount;
+          }
+        }
+      });
+
+      setDailyAmounts(monthlyData); // 重用状态变量，存储年度各月数据
+      setCategoryTotals(categoryData);
+      setCategoryDailyData(categoryMonthlyData); // 存储年度各月数据
+    }
+  }, [trafficData, selectedMonth, selectedYear, viewMode]);
 
   // 从 localStorage 获取类别信息
   const [categories, setCategories] = useState<{ id: string; name: string }[]>(
@@ -186,8 +223,26 @@ const TrafficPage: React.FC = () => {
   };
 
   // 准备图表数据
-  const daysInMonth = new Date(selectedYear, selectedMonth, 0).getDate();
-  const labels = Array.from({ length: daysInMonth }, (_, i) => `${i + 1}日`);
+  let labels: string[];
+  if (viewMode === "month") {
+    labels = [`${selectedYear}年${selectedMonth}月`]; // 单个月份标签
+  } else {
+    // 年度视图：显示12个月的标签
+    labels = [
+      "1月",
+      "2月",
+      "3月",
+      "4月",
+      "5月",
+      "6月",
+      "7月",
+      "8月",
+      "9月",
+      "10月",
+      "11月",
+      "12月",
+    ];
+  }
 
   // 为每个类别和总量准备数据集
   const datasets = [];
@@ -317,7 +372,7 @@ const TrafficPage: React.FC = () => {
         />
       </div>
 
-      <div className="flex space-x-4 mb-6">
+      <div className="flex flex-wrap gap-4 mb-6">
         <Select
           value={String(selectedYear)}
           onChange={(e) => setSelectedYear(Number(e.target.value))}
@@ -329,55 +384,51 @@ const TrafficPage: React.FC = () => {
           ))}
         </Select>
 
-        <Select
-          value={String(selectedMonth)}
-          onChange={(e) => setSelectedMonth(Number(e.target.value))}
-        >
-          {monthNames.map((name, index) => (
-            <option key={index + 1} value={index + 1}>
-              {name}
-            </option>
-          ))}
-        </Select>
-      </div>
+        {viewMode === "month" && (
+          <Select
+            value={String(selectedMonth)}
+            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+          >
+            {monthNames.map((name, index) => (
+              <option key={index + 1} value={index + 1}>
+                {name}
+              </option>
+            ))}
+          </Select>
+        )}
 
-      {/* 总量展示卡片 */}
-      <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-blue-50 rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-2">总流量</h3>
-          <p className="text-2xl text-blue-600">{totalAmount.toFixed(2)}</p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-2">月度总计</h3>
-          <p className="text-2xl">
-            {dailyAmounts.reduce((sum, val) => sum + val, 0).toFixed(2)}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-2">日均流量</h3>
-          <p className="text-2xl">
-            {dailyAmounts.length > 0
-              ? (
-                  dailyAmounts.reduce((sum, val) => sum + val, 0) /
-                  dailyAmounts.length
-                ).toFixed(2)
-              : "0.00"}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="font-semibold mb-2">峰值流量</h3>
-          <p className="text-2xl">
-            {dailyAmounts.length > 0
-              ? Math.max(...dailyAmounts).toFixed(2)
-              : "0.00"}
-          </p>
+        <div className="flex space-x-2">
+          <button
+            className={`px-4 py-2 rounded-md ${
+              viewMode === "month"
+                ? "bg-blue-500 text-white"
+                : "bg-gray-200 text-gray-700"
+            }`}
+            onClick={() => setViewMode("month")}
+          >
+            月度视图
+          </button>
+          <button
+            className={`px-4 py-2 rounded-md ${
+              viewMode === "year"
+                ? "bg-blue-500 text-white"
+                : "bg-gray-200 text-gray-700"
+            }`}
+            onClick={() => setViewMode("year")}
+          >
+            年度视图
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* 按日期的折线图 */}
         <div className="bg-white rounded-lg shadow p-4">
-          <h2 className="text-lg font-semibold mb-4">各类别每日流量趋势</h2>
+          <h2 className="text-lg font-semibold mb-4">
+            {viewMode === "month"
+              ? "各类别月度流量对比"
+              : "各类别年度月度流量趋势"}
+          </h2>
           {Object.keys(categoryDailyData).length > 0 ? (
             <Line data={chartData} options={options} />
           ) : (
