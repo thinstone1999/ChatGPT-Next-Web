@@ -45,6 +45,84 @@ const TrafficManagementPage: React.FC = () => {
   // 新类别输入状态
   const [newCategory, setNewCategory] = useState("");
   const [showAddCategory, setShowAddCategory] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+
+  // 分页和筛选状态
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10); // 每页显示10条
+  const [filterMonth, setFilterMonth] = useState(""); // 按月份筛选
+
+  // 筛选和排序数据
+  const filteredAndSortedData = trafficData
+    .filter((item) => {
+      if (filterMonth) {
+        const [, month] = item.date.split("-");
+        return month === filterMonth;
+      }
+      return true;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date)); // 按日期降序排列
+
+  // 计算分页数据
+  const totalPages = Math.ceil(filteredAndSortedData.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentData = filteredAndSortedData.slice(startIndex, endIndex);
+
+  // 导入导出功能
+  const exportData = () => {
+    const dataToExport = {
+      trafficData,
+      categories,
+      timestamp: new Date().toISOString(),
+    };
+    const jsonString = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `traffic-data-backup-${new Date()
+      .toISOString()
+      .slice(0, 19)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("数据导出成功");
+  };
+
+  const importData = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const importedData = JSON.parse(e.target?.result as string);
+        if (
+          importedData.trafficData &&
+          Array.isArray(importedData.trafficData)
+        ) {
+          setTrafficData(importedData.trafficData);
+          if (
+            importedData.categories &&
+            Array.isArray(importedData.categories)
+          ) {
+            setCategories(importedData.categories);
+          }
+          showToast("数据导入成功");
+        } else {
+          showToast("无效的数据格式");
+        }
+      } catch (error) {
+        console.error("导入数据失败:", error);
+        showToast("导入数据失败，请检查文件格式");
+      }
+    };
+    reader.readAsText(file);
+    // 重置input，允许重复导入同一文件
+    event.target.value = "";
+  };
 
   // 从 localStorage 加载数据
   useEffect(() => {
@@ -264,28 +342,45 @@ const TrafficManagementPage: React.FC = () => {
         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-200">
           流量管理
         </h1>
-        <IconButton
-          icon={
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
-              <polyline points="17 21 17 13 7 13 7 21"></polyline>
-              <polyline points="7 3 7 8 15 8"></polyline>
-            </svg>
-          }
-          text="返回首页"
-          onClick={() => (window.location.hash = "#/")}
-          bordered
-        />
+        <div className="flex space-x-3">
+          <button
+            onClick={exportData}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 text-sm"
+          >
+            导出数据
+          </button>
+          <label className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors duration-200 text-sm cursor-pointer">
+            导入数据
+            <input
+              type="file"
+              accept=".json"
+              onChange={importData}
+              className="hidden"
+            />
+          </label>
+          <IconButton
+            icon={
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+            }
+            text="返回首页"
+            onClick={() => (window.location.hash = "#/")}
+            bordered
+          />
+        </div>
       </div>
 
       {/* 添加流量数据表单 */}
@@ -294,84 +389,98 @@ const TrafficManagementPage: React.FC = () => {
           添加流量数据
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">
-              流量类别
-            </label>
-            <div className="flex gap-2">
-              <Select
-                value={formData.category}
-                onChange={handleInputChange}
-                name="category"
-                className="flex-grow"
-              >
-                <option value="">请选择类别</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </Select>
+          <div className="relative">
+            <div className="flex items-center gap-2 mb-1">
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                流量类别
+              </label>
               <button
                 type="button"
-                onClick={() => setShowAddCategory(!showAddCategory)}
-                className="px-3 py-2 bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 text-sm transition-colors duration-200"
+                onClick={() => setShowCategoryManager(!showCategoryManager)}
+                className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
               >
-                +
+                管理
               </button>
             </div>
-
-            {/* 显示类别列表及删除按钮 */}
-            <div className="mt-3">
-              <div className="text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">
-                类别管理:
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((category) => (
-                  <div
-                    key={category.id}
-                    className="flex items-center bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-1 text-sm"
-                  >
-                    <span className="text-blue-700 dark:text-blue-300">
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Select
+                  value={formData.category}
+                  onChange={handleInputChange}
+                  name="category"
+                  className="flex-grow"
+                >
+                  <option value="">请选择类别</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
                       {category.name}
-                    </span>
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              {/* 显示类别列表及删除按钮 */}
+              {showCategoryManager && (
+                <div className="mt-2">
+                  <div className="text-sm font-medium mb-1 text-gray-600 dark:text-gray-400">
+                    类别管理:
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {categories.map((category) => (
+                      <div
+                        key={category.id}
+                        className="flex items-center bg-blue-50 dark:bg-blue-900/50 border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-1 text-sm"
+                      >
+                        <span className="text-blue-700 dark:text-blue-300">
+                          {category.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(category.id)}
+                          className="ml-2 text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {showAddCategory ? (
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        type="text"
+                        placeholder="输入新类别"
+                        value={newCategory}
+                        onChange={(e) => setNewCategory(e.target.value)}
+                        className="flex-grow p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm transition-colors duration-200"
+                      >
+                        添加
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCategory(false)}
+                        className="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors duration-200"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => handleDeleteCategory(category.id)}
-                      className="ml-2 text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                      onClick={() => setShowAddCategory(true)}
+                      className="mt-2 text-sm text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                     >
-                      ×
+                      + 添加新类别
                     </button>
-                  </div>
-                ))}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
-
-            {showAddCategory && (
-              <div className="mt-3 flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="输入新类别"
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  className="flex-grow p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCategory}
-                  className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm transition-colors duration-200"
-                >
-                  添加
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddCategory(false)}
-                  className="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 text-sm transition-colors duration-200"
-                >
-                  取消
-                </button>
-              </div>
-            )}
           </div>
 
           <div>
@@ -463,9 +572,31 @@ const TrafficManagementPage: React.FC = () => {
 
       {/* 流量数据列表 */}
       <div className="bg-white dark:bg-[var(--white)] rounded-xl shadow-lg p-6 flex-grow border border-gray-200 dark:border-gray-700">
-        <h2 className="text-lg font-semibold mb-4 text-gray-700 dark:text-gray-300">
-          流量数据列表
-        </h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+            流量数据列表
+          </h2>
+          <div className="flex space-x-2">
+            <Select
+              value={filterMonth}
+              onChange={(e) => {
+                setFilterMonth(e.target.value);
+                setCurrentPage(1); // 重置到第一页
+              }}
+              className="w-40"
+            >
+              <option value="">全部月份</option>
+              {Array.from({ length: 12 }, (_, i) => {
+                const month = (i + 1).toString().padStart(2, "0");
+                return (
+                  <option key={month} value={month}>
+                    {month}月
+                  </option>
+                );
+              })}
+            </Select>
+          </div>
+        </div>
 
         {trafficData.length === 0 ? (
           <div className="flex items-center justify-center h-64">
@@ -474,43 +605,98 @@ const TrafficManagementPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <Table
-            columns={[
-              {
-                key: "category",
-                title: "类别",
-                dataIndex: "category",
-                render: (value: string) => {
-                  const category =
-                    categories.find((cat) => cat.id === value)?.name ||
-                    "未知类别";
-                  return <span className="font-medium">{category}</span>;
-                },
-              },
-              {
-                key: "amount",
-                title: "数量",
-                dataIndex: "amount",
-                render: (value: number) => (
-                  <span className="font-mono">{value.toFixed(2)}</span>
-                ),
-              },
-              {
-                key: "date",
-                title: "时间",
-                dataIndex: "date",
-              },
-            ]}
-            dataSource={trafficData}
-            onDelete={(record) => {
-              setTrafficData((prev) =>
-                prev.filter((item) => item.id !== record.id),
-              );
-              showToast("流量数据已删除");
-            }}
-            onEdit={handleEditTraffic}
-            className="mt-2"
-          />
+          <>
+            {/* 筛选和排序后的数据 */}
+            {filteredAndSortedData.length === 0 ? (
+              <div className="flex items-center justify-center h-64">
+                <p className="text-gray-500 dark:text-gray-400">
+                  没有符合条件的数据
+                </p>
+              </div>
+            ) : (
+              <Table
+                columns={[
+                  {
+                    key: "category",
+                    title: "类别",
+                    dataIndex: "category",
+                    render: (value: string) => {
+                      const category =
+                        categories.find((cat) => cat.id === value)?.name ||
+                        "未知类别";
+                      return <span className="font-medium">{category}</span>;
+                    },
+                  },
+                  {
+                    key: "amount",
+                    title: "数量",
+                    dataIndex: "amount",
+                    render: (value: number) => (
+                      <span className="font-mono">{value.toFixed(2)}</span>
+                    ),
+                  },
+                  {
+                    key: "date",
+                    title: "时间",
+                    dataIndex: "date",
+                  },
+                ]}
+                dataSource={currentData}
+                onDelete={(record) => {
+                  setTrafficData((prev) =>
+                    prev.filter((item) => item.id !== record.id),
+                  );
+                  showToast("流量数据已删除");
+                }}
+                onEdit={handleEditTraffic}
+                className="mt-2"
+              />
+            )}
+
+            {/* 分页控件 */}
+            {totalPages > 1 && (
+              <div className="flex justify-between items-center mt-4">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  显示 {startIndex + 1}-
+                  {Math.min(endIndex, filteredAndSortedData.length)} 条，共{" "}
+                  {filteredAndSortedData.length} 条
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                    }
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded ${
+                      currentPage === 1
+                        ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
+                        : "bg-blue-500 text-white hover:bg-blue-600"
+                    }`}
+                  >
+                    上一页
+                  </button>
+
+                  <span className="px-3 py-1 text-gray-700 dark:text-gray-300">
+                    {currentPage} / {totalPages}
+                  </span>
+
+                  <button
+                    onClick={() =>
+                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                    }
+                    disabled={currentPage === totalPages}
+                    className={`px-3 py-1 rounded ${
+                      currentPage === totalPages
+                        ? "bg-gray-200 dark:bg-gray-700 cursor-not-allowed"
+                        : "bg-blue-500 text-white hover:bg-blue-600"
+                    }`}
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
