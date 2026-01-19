@@ -21,6 +21,7 @@ export enum Path {
   NewChat = "/new-chat",
   Masks = "/masks",
   Auth = "/auth",
+  Traffic = "/traffic",
 }
 
 export enum ApiPath {

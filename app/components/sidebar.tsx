@@ -12,6 +12,7 @@ import DeleteIcon from "../icons/delete.svg";
 import MaskIcon from "../icons/mask.svg";
 import PluginIcon from "../icons/plugin.svg";
 import DragIcon from "../icons/drag.svg";
+import TrafficIcon from "../icons/traffic.svg";
 
 import Locale from "../locales";
 
@@ -184,6 +185,13 @@ export function SideBar(props: { className?: string }) {
           text={shouldNarrow ? undefined : Locale.Plugin.Name}
           className={styles["sidebar-bar-button"]}
           onClick={() => showToast(Locale.WIP)}
+          shadow
+        />
+        <IconButton
+          icon={<TrafficIcon />}
+          text={shouldNarrow ? undefined : "流量统计"}
+          className={styles["sidebar-bar-button"]}
+          onClick={() => navigate(Path.Traffic)}
           shadow
         />
       </div>
