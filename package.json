@@ -2,6 +2,9 @@
   "name": "chatgpt-next-web",
   "private": false,
   "license": "mit",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "cross-env BUILD_MODE=standalone next build",
