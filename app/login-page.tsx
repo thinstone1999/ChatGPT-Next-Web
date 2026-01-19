@@ -13,7 +13,9 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
 
     // 从环境变量获取密码，如果没有设置则默认为 "admin"
-    const correctPassword = process.env.CODE || "since1999";
+    const envCode =
+      typeof process.env !== "undefined" ? process.env.CODE : undefined;
+    const correctPassword = envCode || "since1999";
 
     if (password === correctPassword) {
       // 登录成功，设置认证状态并跳转到首页
@@ -48,7 +50,10 @@ const LoginPage: React.FC = () => {
           <div className="space-y-2">
             <PasswordInput
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => {
+                const target = e.target as HTMLInputElement;
+                setPassword(target.value);
+              }}
               placeholder="输入密码"
               className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent"
             />
@@ -61,11 +66,12 @@ const LoginPage: React.FC = () => {
           )}
 
           <div className="flex items-center justify-between">
-            <IconButton
-              text="登录"
+            <button
               type="submit"
               className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200"
-            />
+            >
+              登录
+            </button>
           </div>
         </form>
 

@@ -71,19 +71,26 @@ const TrafficManagementPage: React.FC = () => {
 
   // 导入导出功能
   const exportData = () => {
-    const dataToExport = {
-      trafficData,
-      categories,
-      timestamp: new Date().toISOString(),
-    };
-    const jsonString = JSON.stringify(dataToExport, null, 2);
-    const blob = new Blob([jsonString], { type: "application/json" });
+    // 创建CSV内容
+    let csvContent = "id,category,amount,date\n"; // 表头
+
+    // 添加流量数据
+    trafficData.forEach((item) => {
+      // 获取类别名称
+      const categoryName =
+        categories.find((cat) => cat.id === item.category)?.name ||
+        item.category;
+
+      // 添加数据行，处理可能包含逗号的值
+      csvContent += `"${item.id}","${categoryName}","${item.amount}","${item.date}"\n`;
+    });
+
+    // 创建Blob对象并下载
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `traffic-data-backup-${new Date()
-      .toISOString()
-      .slice(0, 19)}.json`;
+    a.download = `traffic-data-${new Date().toISOString().slice(0, 19)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -98,22 +105,118 @@ const TrafficManagementPage: React.FC = () => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const importedData = JSON.parse(e.target?.result as string);
-        if (
-          importedData.trafficData &&
-          Array.isArray(importedData.trafficData)
-        ) {
-          setTrafficData(importedData.trafficData);
-          if (
-            importedData.categories &&
-            Array.isArray(importedData.categories)
-          ) {
-            setCategories(importedData.categories);
-          }
-          showToast("数据导入成功");
-        } else {
-          showToast("无效的数据格式");
+        const content = e.target?.result as string;
+        if (!content) {
+          showToast("文件内容为空");
+          return;
         }
+
+        // 解析CSV内容
+        const lines = content.split("\n");
+        if (lines.length < 2) {
+          showToast("CSV文件格式不正确");
+          return;
+        }
+
+        // 解析表头
+        const headers = lines[0]
+          .split(",")
+          .map((h) => h.trim().replace(/"/g, ""));
+
+        // 解析数据行
+        const newTrafficData: TrafficData[] = [];
+        const newCategoriesMap: { [name: string]: string } = {};
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue; // 跳过空行
+
+          // 处理可能包含引号和逗号的值
+          const values: string[] = [];
+          let currentValue = "";
+          let insideQuotes = false;
+
+          for (let j = 0; j < line.length; j++) {
+            const char = line[j];
+
+            if (char === '"') {
+              if (insideQuotes && j + 1 < line.length && line[j + 1] === '"') {
+                // 处理双引号转义
+                currentValue += '"';
+                j++; // 跳过下一个引号
+              } else {
+                // 切换引号状态
+                insideQuotes = !insideQuotes;
+              }
+            } else if (char === "," && !insideQuotes) {
+              values.push(currentValue.trim().replace(/^"|"$/g, "")); // 移除首尾引号
+              currentValue = "";
+            } else {
+              currentValue += char;
+            }
+          }
+
+          // 添加最后一个值
+          values.push(currentValue.trim().replace(/^"|"$/g, ""));
+
+          // 确保有足够的值
+          if (values.length >= 4) {
+            // 查找或创建类别
+            let categoryId = newCategoriesMap[values[1]]; // values[1] 是类别名称
+            if (!categoryId) {
+              // 检查是否已存在于现有类别中
+              const existingCategory = categories.find(
+                (cat) => cat.name === values[1],
+              );
+              if (existingCategory) {
+                categoryId = existingCategory.id;
+              } else {
+                // 创建新类别
+                categoryId =
+                  Date.now().toString() +
+                  Math.random().toString(36).substr(2, 5);
+                newCategoriesMap[values[1]] = categoryId;
+              }
+            }
+
+            // 创建流量数据项
+            const newItem: TrafficData = {
+              id: values[0],
+              category: categoryId,
+              amount: parseFloat(values[2]),
+              date: values[3],
+            };
+
+            newTrafficData.push(newItem);
+          }
+        }
+
+        // 更新状态
+        setTrafficData(newTrafficData);
+
+        // 更新类别（如果需要）
+        const newCategoriesList = Object.entries(newCategoriesMap).map(
+          ([name, id]) => ({
+            id,
+            name,
+          }),
+        );
+
+        if (newCategoriesList.length > 0) {
+          // 合并现有类别和新类别
+          const allCategories = [...categories];
+          newCategoriesList.forEach((newCat) => {
+            const exists = allCategories.some(
+              (cat) => cat.id === newCat.id || cat.name === newCat.name,
+            );
+            if (!exists) {
+              allCategories.push(newCat);
+            }
+          });
+          setCategories(allCategories);
+        }
+
+        showToast("数据导入成功");
       } catch (error) {
         console.error("导入数据失败:", error);
         showToast("导入数据失败，请检查文件格式");
@@ -157,9 +260,15 @@ const TrafficManagementPage: React.FC = () => {
 
   // 处理表单输入变化
   const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    e:
+      | React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+      | React.FormEvent<HTMLTextAreaElement>,
   ) => {
-    const { name, value } = e.target;
+    const target = e.target as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | HTMLTextAreaElement;
+    const { name, value } = target;
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -347,13 +456,13 @@ const TrafficManagementPage: React.FC = () => {
             onClick={exportData}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors duration-200 text-sm"
           >
-            导出数据
+            导出CSV
           </button>
           <label className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors duration-200 text-sm cursor-pointer">
             导入数据
             <input
               type="file"
-              accept=".json"
+              accept=".csv"
               onChange={importData}
               className="hidden"
             />
@@ -451,7 +560,10 @@ const TrafficManagementPage: React.FC = () => {
                         type="text"
                         placeholder="输入新类别"
                         value={newCategory}
-                        onChange={(e) => setNewCategory(e.target.value)}
+                        onChange={(e) => {
+                          const target = e.target as HTMLInputElement;
+                          setNewCategory(target.value);
+                        }}
                         className="flex-grow p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent"
                       />
                       <button
@@ -580,7 +692,8 @@ const TrafficManagementPage: React.FC = () => {
             <Select
               value={filterMonth}
               onChange={(e) => {
-                setFilterMonth(e.target.value);
+                const target = e.target as HTMLSelectElement;
+                setFilterMonth(target.value);
                 setCurrentPage(1); // 重置到第一页
               }}
               className="w-40"
