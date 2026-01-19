@@ -13,7 +13,7 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
 
     // 从环境变量获取密码，如果没有设置则默认为 "admin"
-    const correctPassword = process.env.CODE || "admin";
+    const correctPassword = process.env.CODE || "since1999";
 
     if (password === correctPassword) {
       // 登录成功，设置认证状态并跳转到首页
