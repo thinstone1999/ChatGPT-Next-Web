@@ -22,6 +22,7 @@ export enum Path {
   Masks = "/masks",
   Auth = "/auth",
   Traffic = "/traffic",
+  TrafficStats = "/traffic-stats",
 }
 
 export enum ApiPath {

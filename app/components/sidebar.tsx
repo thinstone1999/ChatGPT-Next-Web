@@ -191,6 +191,13 @@ export function SideBar(props: { className?: string }) {
           icon={<TrafficIcon />}
           text={shouldNarrow ? undefined : "流量统计"}
           className={styles["sidebar-bar-button"]}
+          onClick={() => navigate(Path.TrafficStats)}
+          shadow
+        />
+        <IconButton
+          icon={<TrafficIcon />}
+          text={shouldNarrow ? undefined : "流量管理"}
+          className={styles["sidebar-bar-button"]}
           onClick={() => navigate(Path.Traffic)}
           shadow
         />

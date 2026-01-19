@@ -56,7 +56,14 @@ const MaskPage = dynamic(async () => (await import("./mask")).MaskPage, {
 });
 
 const TrafficPage = dynamic(
-  async () => (await import("../traffic-page")).default,
+  async () => (await import("../traffic-management-page")).default,
+  {
+    loading: () => <Loading noLogo />,
+  },
+);
+
+const TrafficStatsPage = dynamic(
+  async () => (await import("../traffic-stats-page")).default,
   {
     loading: () => <Loading noLogo />,
   },
@@ -167,6 +174,7 @@ function Screen() {
               <Route path={Path.Chat} element={<Chat />} />
               <Route path={Path.Settings} element={<Settings />} />
               <Route path={Path.Traffic} element={<TrafficPage />} />
+              <Route path={Path.TrafficStats} element={<TrafficStatsPage />} />
             </Routes>
           </div>
         </>

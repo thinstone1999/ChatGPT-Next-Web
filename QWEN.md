@@ -141,3 +141,8 @@ docker run -d -p 3000:3000 \
 - **多模型支持**: 支持 OpenAI、Azure OpenAI 和 Google Gemini Pro
 - **自定义模型**: 通过 `CUSTOM_MODELS` 环境变量控制模型列表
 - **PWA 支持**: 渐进式 Web 应用功能
+
+## 辅助说明
+ - 总是用中文回复
+ - 尽量使用合适的组件让前端UI更美化
+ - 不用启动服务器验证更改

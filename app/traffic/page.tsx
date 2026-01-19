@@ -1,7 +1,7 @@
 "use client";
 
-import TrafficPage from "../traffic-page";
+import TrafficManagementPage from "../traffic-management-page";
 
 export default function Page() {
-  return <TrafficPage />;
+  return <TrafficManagementPage />;
 }
