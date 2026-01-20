@@ -27,12 +27,7 @@ const TrafficManagementPage: React.FC = () => {
   const [trafficData, setTrafficData] = useState<TrafficData[]>([]);
 
   // 流量类别状态
-  const [categories, setCategories] = useState<TrafficCategory[]>([
-    { id: "1", name: "工作" },
-    { id: "2", name: "生活" },
-    { id: "3", name: "娱乐" },
-    { id: "4", name: "学习" },
-  ]);
+  const [categories, setCategories] = useState<TrafficCategory[]>([]);
 
   // 表单状态
   const [formData, setFormData] = useState({
@@ -71,18 +66,42 @@ const TrafficManagementPage: React.FC = () => {
 
   // 导入导出功能
   const exportData = () => {
+    // 获取所有唯一的年月和类别
+    const allMonths = Array.from(
+      new Set(trafficData.map((item) => item.date.substring(0, 7))), // YYYY-MM format
+    ).sort();
+
+    const allCategories = Array.from(
+      new Set(
+        trafficData.map((item) => {
+          const category = categories.find((cat) => cat.id === item.category);
+          return category ? category.name : item.category;
+        }),
+      ),
+    ).sort();
+
     // 创建CSV内容
-    let csvContent = "id,category,amount,date\n"; // 表头
+    let csvContent = "年月," + allCategories.join(",") + "\n"; // 表头
 
-    // 添加流量数据
-    trafficData.forEach((item) => {
-      // 获取类别名称
-      const categoryName =
-        categories.find((cat) => cat.id === item.category)?.name ||
-        item.category;
+    // 为每个月生成一行数据
+    allMonths.forEach((month) => {
+      const row: string[] = [month];
 
-      // 添加数据行，处理可能包含逗号的值
-      csvContent += `"${item.id}","${categoryName}","${item.amount}","${item.date}"\n`;
+      allCategories.forEach((category) => {
+        // 查找该月该类别的数据
+        const item = trafficData.find((data) => {
+          const dataMonth = data.date.substring(0, 7); // YYYY-MM format
+          const categoryName =
+            categories.find((cat) => cat.id === data.category)?.name ||
+            data.category;
+          return dataMonth === month && categoryName === category;
+        });
+
+        // 添加金额值或留空
+        row.push(item ? String(item.amount) : "");
+      });
+
+      csvContent += row.join(",") + "\n";
     });
 
     // 创建Blob对象并下载
@@ -123,6 +142,9 @@ const TrafficManagementPage: React.FC = () => {
           .split(",")
           .map((h) => h.trim().replace(/"/g, ""));
 
+        // 获取类别名称（跳过第一列"年月"）
+        const categoryNames = headers.slice(1);
+
         // 解析数据行
         const newTrafficData: TrafficData[] = [];
         const newCategoriesMap: { [name: string]: string } = {};
@@ -159,14 +181,23 @@ const TrafficManagementPage: React.FC = () => {
           // 添加最后一个值
           values.push(currentValue.trim().replace(/^"|"$/g, ""));
 
-          // 确保有足够的值
-          if (values.length >= 4) {
-            // 查找或创建类别
-            let categoryId = newCategoriesMap[values[1]]; // values[1] 是类别名称
+          if (values.length < 2) continue; // 至少需要年月和一个类别
+
+          const month = values[0]; // 年月格式为 YYYY-MM
+
+          // 遍历每个类别及其对应的值
+          for (let j = 1; j < values.length && j <= categoryNames.length; j++) {
+            const categoryName = categoryNames[j - 1];
+            const amountStr = values[j];
+
+            if (!amountStr || isNaN(parseFloat(amountStr))) continue; // 跳过空值或非数字
+
+            // 查找或创建类别ID
+            let categoryId = newCategoriesMap[categoryName];
             if (!categoryId) {
               // 检查是否已存在于现有类别中
               const existingCategory = categories.find(
-                (cat) => cat.name === values[1],
+                (cat) => cat.name === categoryName,
               );
               if (existingCategory) {
                 categoryId = existingCategory.id;
@@ -175,16 +206,16 @@ const TrafficManagementPage: React.FC = () => {
                 categoryId =
                   Date.now().toString() +
                   Math.random().toString(36).substr(2, 5);
-                newCategoriesMap[values[1]] = categoryId;
+                newCategoriesMap[categoryName] = categoryId;
               }
             }
 
             // 创建流量数据项
             const newItem: TrafficData = {
-              id: values[0],
+              id: `${month}_${categoryId}`, // 使用年月和类别ID组合成唯一ID
               category: categoryId,
-              amount: parseFloat(values[2]),
-              date: values[3],
+              amount: parseFloat(amountStr),
+              date: `${month}-01`, // 使用每月第一天作为日期
             };
 
             newTrafficData.push(newItem);
@@ -467,6 +498,28 @@ const TrafficManagementPage: React.FC = () => {
               className="hidden"
             />
           </label>
+          <button
+            onClick={() => {
+              if (window.confirm("确定要清除所有数据吗？此操作不可恢复！")) {
+                setTrafficData([]);
+                // 完全清空类别列表，不保留默认类别
+                const emptyCategories: TrafficCategory[] = [];
+                setCategories(emptyCategories);
+
+                // 同时清除localStorage中的数据
+                localStorage.removeItem("trafficData");
+                localStorage.setItem(
+                  "trafficCategories",
+                  JSON.stringify(emptyCategories),
+                );
+
+                showToast("所有数据已清除");
+              }
+            }}
+            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors duration-200 text-sm min-w-[96px]"
+          >
+            清除数据
+          </button>
           <IconButton
             icon={
               <svg
@@ -618,14 +671,50 @@ const TrafficManagementPage: React.FC = () => {
                 onChange={handleInputChange}
                 className="w-full"
               >
-                {Array.from({ length: 10 }, (_, i) => {
-                  const year = new Date().getFullYear() - 5 + i;
-                  return (
-                    <option key={year} value={year}>
-                      {year}年
-                    </option>
-                  );
-                })}
+                {trafficData.length > 0
+                  ? (() => {
+                      const dataYears = Array.from(
+                        new Set(
+                          trafficData.map((item) =>
+                            parseInt(item.date.split("-")[0]),
+                          ),
+                        ),
+                      ).sort((a, b) => a - b);
+
+                      if (dataYears.length > 0) {
+                        const minYear = dataYears[0];
+                        const maxYear = new Date().getFullYear();
+                        return Array.from(
+                          { length: maxYear - minYear + 1 },
+                          (_, i) => {
+                            const year = minYear + i;
+                            return (
+                              <option key={year} value={year}>
+                                {year}年
+                              </option>
+                            );
+                          },
+                        );
+                      }
+
+                      // 如果数据年份为空，回退到过去10年
+                      return Array.from({ length: 10 }, (_, i) => {
+                        const year = new Date().getFullYear() - 5 + i;
+                        return (
+                          <option key={year} value={year}>
+                            {year}年
+                          </option>
+                        );
+                      });
+                    })()
+                  : Array.from({ length: 10 }, (_, i) => {
+                      const year = new Date().getFullYear() - 5 + i;
+                      return (
+                        <option key={year} value={year}>
+                          {year}年
+                        </option>
+                      );
+                    })}
               </Select>
             </div>
             <div>
@@ -695,14 +784,42 @@ const TrafficManagementPage: React.FC = () => {
               className="w-full sm:w-40"
             >
               <option value="">全部年度</option>
-              {Array.from({ length: 10 }, (_, i) => {
-                const year = new Date().getFullYear() - 5 + i;
-                return (
-                  <option key={year} value={year}>
-                    {year}年
-                  </option>
-                );
-              })}
+              {trafficData.length > 0
+                ? (() => {
+                    const dataYears = Array.from(
+                      new Set(
+                        trafficData.map((item) =>
+                          parseInt(item.date.split("-")[0]),
+                        ),
+                      ),
+                    ).sort((a, b) => a - b);
+
+                    if (dataYears.length > 0) {
+                      return dataYears.map((year) => (
+                        <option key={year} value={year}>
+                          {year}年
+                        </option>
+                      ));
+                    }
+
+                    // 如果数据年份为空，回退到过去10年
+                    return Array.from({ length: 10 }, (_, i) => {
+                      const year = new Date().getFullYear() - 5 + i;
+                      return (
+                        <option key={year} value={year}>
+                          {year}年
+                        </option>
+                      );
+                    });
+                  })()
+                : Array.from({ length: 10 }, (_, i) => {
+                    const year = new Date().getFullYear() - 5 + i;
+                    return (
+                      <option key={year} value={year}>
+                        {year}年
+                      </option>
+                    );
+                  })}
             </Select>
           </div>
         </div>

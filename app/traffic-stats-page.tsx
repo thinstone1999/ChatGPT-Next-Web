@@ -68,11 +68,32 @@ const TrafficPage: React.FC = () => {
     "十二月",
   ];
 
-  // 年份范围（过去5年）
-  const years = Array.from(
-    { length: 5 },
-    (_, i) => new Date().getFullYear() - 4 + i,
-  );
+  // 年份范围：有数据时按数据最早年份到当前年份，没有数据时按过去5年
+  const years =
+    trafficData.length > 0
+      ? (() => {
+          const dataYears = Array.from(
+            new Set(
+              trafficData.map((item) => parseInt(item.date.split("-")[0])),
+            ),
+          ).sort((a, b) => a - b);
+
+          if (dataYears.length > 0) {
+            const minYear = dataYears[0];
+            const maxYear = new Date().getFullYear();
+            return Array.from(
+              { length: maxYear - minYear + 1 },
+              (_, i) => minYear + i,
+            );
+          }
+
+          // 如果数据年份为空，回退到过去5年
+          return Array.from(
+            { length: 5 },
+            (_, i) => new Date().getFullYear() - 4 + i,
+          );
+        })()
+      : Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 4 + i);
 
   // 从 localStorage 加载流量数据
   useEffect(() => {
@@ -210,7 +231,7 @@ const TrafficPage: React.FC = () => {
       setCategoryTotals(categoryData);
       setCategoryDailyData(finalCategoryMonthlyData); // 存储截断后的类别月度数据
     } else if (viewMode === "year") {
-      // 年度视图：聚合所有年份的数据，只显示有数据的年份
+      // 年度视图：按当年最后一个月的总量，作为当年的数据
       // 首先找出所有有数据的年份
       const availableYears = new Set<number>();
       trafficData.forEach((item) => {
@@ -218,34 +239,47 @@ const TrafficPage: React.FC = () => {
         availableYears.add(year);
       });
 
-      // 按年份聚合数据
-      const yearlyData: { [key: number]: number } = {};
-      const categoryYearlyData: { [key: string]: { [key: number]: number } } =
+      // 按年份和月份聚合数据
+      const yearlyMonthlyData: { [year: number]: { [month: number]: number } } =
         {};
+      const categoryYearlyMonthlyData: {
+        [categoryId: string]: { [year: number]: { [month: number]: number } };
+      } = {};
       const categoryData: { [key: string]: number } = {};
 
       trafficData.forEach((item) => {
-        const [yearStr] = item.date.split("-");
+        const [yearStr, monthStr] = item.date.split("-").map(Number);
         const yearNum = Number(yearStr);
+        const monthNum = Number(monthStr);
 
         // 只处理有数据的年份
         if (availableYears.has(yearNum)) {
-          // 累加到对应年份
-          if (!yearlyData[yearNum]) {
-            yearlyData[yearNum] = 0;
-          }
-          yearlyData[yearNum] += item.amount;
-
-          // 初始化类别年度数据对象
-          if (!categoryYearlyData[item.category]) {
-            categoryYearlyData[item.category] = {};
+          // 初始化年份月份数据结构
+          if (!yearlyMonthlyData[yearNum]) {
+            yearlyMonthlyData[yearNum] = {};
           }
 
-          // 累加对应类别的年度流量
-          if (!categoryYearlyData[item.category][yearNum]) {
-            categoryYearlyData[item.category][yearNum] = 0;
+          // 累加到对应年月
+          if (!yearlyMonthlyData[yearNum][monthNum]) {
+            yearlyMonthlyData[yearNum][monthNum] = 0;
           }
-          categoryYearlyData[item.category][yearNum] += item.amount;
+          yearlyMonthlyData[yearNum][monthNum] += item.amount;
+
+          // 初始化类别年度月份数据对象
+          if (!categoryYearlyMonthlyData[item.category]) {
+            categoryYearlyMonthlyData[item.category] = {};
+          }
+
+          if (!categoryYearlyMonthlyData[item.category][yearNum]) {
+            categoryYearlyMonthlyData[item.category][yearNum] = {};
+          }
+
+          // 累加对应类别的年度月份流量
+          if (!categoryYearlyMonthlyData[item.category][yearNum][monthNum]) {
+            categoryYearlyMonthlyData[item.category][yearNum][monthNum] = 0;
+          }
+          categoryYearlyMonthlyData[item.category][yearNum][monthNum] +=
+            item.amount;
 
           // 按类别累加
           if (categoryData[item.category]) {
@@ -256,22 +290,51 @@ const TrafficPage: React.FC = () => {
         }
       });
 
-      // 将年度数据转换为按年份排序的数组
-      const sortedYears = Array.from(availableYears).sort((a, b) => a - b);
+      // 计算每年最后一个月的数据
       const yearlyAmounts: number[] = [];
-      sortedYears.forEach((year) => {
-        yearlyAmounts.push(yearlyData[year] || 0);
-      });
+      const sortedYears = Array.from(availableYears).sort((a, b) => a - b);
 
       // 处理每个类别的年度数据
       const processedCategoryYearlyData: { [key: string]: number[] } = {};
-      Object.keys(categoryYearlyData).forEach((categoryId) => {
-        processedCategoryYearlyData[categoryId] = [];
-        sortedYears.forEach((year) => {
-          processedCategoryYearlyData[categoryId].push(
-            categoryYearlyData[categoryId][year] || 0,
-          );
-        });
+
+      sortedYears.forEach((year) => {
+        // 找到该年的最后一个月
+        const monthsInYear = Object.keys(yearlyMonthlyData[year])
+          .map(Number)
+          .sort((a, b) => b - a);
+        const lastMonth = monthsInYear[0]; // 最大的月份
+
+        if (lastMonth !== undefined) {
+          // 使用最后一个月的数据作为该年的数据
+          yearlyAmounts.push(yearlyMonthlyData[year][lastMonth]);
+
+          // 为每个类别也使用最后一个月的数据
+          Object.keys(categoryYearlyMonthlyData).forEach((categoryId) => {
+            if (!processedCategoryYearlyData[categoryId]) {
+              processedCategoryYearlyData[categoryId] = [];
+            }
+
+            if (
+              categoryYearlyMonthlyData[categoryId][year] &&
+              categoryYearlyMonthlyData[categoryId][year][lastMonth]
+            ) {
+              processedCategoryYearlyData[categoryId].push(
+                categoryYearlyMonthlyData[categoryId][year][lastMonth],
+              );
+            } else {
+              processedCategoryYearlyData[categoryId].push(0);
+            }
+          });
+        } else {
+          // 如果该年没有月份数据，添加0
+          yearlyAmounts.push(0);
+          Object.keys(categoryYearlyMonthlyData).forEach((categoryId) => {
+            if (!processedCategoryYearlyData[categoryId]) {
+              processedCategoryYearlyData[categoryId] = [];
+            }
+            processedCategoryYearlyData[categoryId].push(0);
+          });
+        }
       });
 
       setDailyAmounts(yearlyAmounts); // 存储年度数据
