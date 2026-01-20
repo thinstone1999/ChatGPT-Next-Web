@@ -127,6 +127,60 @@ const TrafficPage: React.FC = () => {
         }
       });
 
+      // 实现间隔月份以前一月份数据填充的逻辑
+      // 首先找到第一个有数据的月份
+      let firstMonthWithData = -1;
+      for (let i = 0; i < 12; i++) {
+        if (monthlyData[i] > 0) {
+          firstMonthWithData = i;
+          break;
+        }
+      }
+
+      // 如果第一个月之后有数据，才进行向前填充
+      if (firstMonthWithData > 0 && firstMonthWithData < 12) {
+        // 从第一个有数据的月份开始，向前填充前面的月份
+        for (let i = firstMonthWithData - 1; i >= 0; i--) {
+          monthlyData[i] = monthlyData[firstMonthWithData];
+        }
+      }
+
+      // 对于后续月份，如果某个月份没有数据，则使用前一个月的数据
+      for (let i = 1; i < 12; i++) {
+        if (monthlyData[i] === 0 && monthlyData[i - 1] !== 0) {
+          monthlyData[i] = monthlyData[i - 1]; // 使用前一月份的数据
+        }
+      }
+
+      // 对每个类别的数据也应用相同的逻辑
+      Object.keys(categoryMonthlyData).forEach((categoryId) => {
+        const categoryDataArray = categoryMonthlyData[categoryId];
+
+        // 找到第一个有数据的月份
+        let firstCatMonthWithData = -1;
+        for (let i = 0; i < 12; i++) {
+          if (categoryDataArray[i] > 0) {
+            firstCatMonthWithData = i;
+            break;
+          }
+        }
+
+        // 如果第一个月之后有数据，才进行向前填充
+        if (firstCatMonthWithData > 0 && firstCatMonthWithData < 12) {
+          // 从第一个有数据的月份开始，向前填充前面的月份
+          for (let i = firstCatMonthWithData - 1; i >= 0; i--) {
+            categoryDataArray[i] = categoryDataArray[firstCatMonthWithData];
+          }
+        }
+
+        // 对于后续月份，如果某个月份没有数据，则使用前一个月的数据
+        for (let i = 1; i < 12; i++) {
+          if (categoryDataArray[i] === 0 && categoryDataArray[i - 1] !== 0) {
+            categoryDataArray[i] = categoryDataArray[i - 1]; // 使用前一月份的数据
+          }
+        }
+      });
+
       // 找到最后一个有数据的月份索引
       let lastMonthWithData = -1;
       for (let i = 11; i >= 0; i--) {
@@ -452,19 +506,6 @@ const TrafficPage: React.FC = () => {
         ) : (
           // 在年度视图模式下，不需要年份选择器，因为会显示所有有数据的年份
           <div className="text-sm text-gray-500">显示有数据的年份</div>
-        )}
-
-        {viewMode === "month" && (
-          <Select
-            value={String(selectedMonth)}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-          >
-            {monthNames.map((name, index) => (
-              <option key={index + 1} value={index + 1}>
-                {name}
-              </option>
-            ))}
-          </Select>
         )}
 
         <div className="flex space-x-2">
