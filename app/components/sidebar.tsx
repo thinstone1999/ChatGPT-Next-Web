@@ -181,13 +181,6 @@ export function SideBar(props: { className?: string }) {
           shadow
         />
         <IconButton
-          icon={<PluginIcon />}
-          text={shouldNarrow ? undefined : Locale.Plugin.Name}
-          className={styles["sidebar-bar-button"]}
-          onClick={() => showToast(Locale.WIP)}
-          shadow
-        />
-        <IconButton
           icon={<TrafficIcon />}
           text={shouldNarrow ? undefined : "流量统计"}
           className={styles["sidebar-bar-button"]}

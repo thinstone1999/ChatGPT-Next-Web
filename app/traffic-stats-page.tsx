@@ -90,48 +90,7 @@ const TrafficPage: React.FC = () => {
   // 根据选择的年月过滤和聚合数据
   useEffect(() => {
     if (viewMode === "month") {
-      // 月度视图：过滤指定年月的数据
-      const filteredData = trafficData.filter((item) => {
-        const [year, month] = item.date.split("-").map(Number);
-        return year === selectedYear && month === selectedMonth;
-      });
-
-      // 由于现在数据是按月存储的，我们只需要计算总量
-      const monthlyTotal = filteredData.reduce(
-        (sum, item) => sum + item.amount,
-        0,
-      );
-
-      // 初始化月度数据数组（这里我们只有一个数据点，代表整个月的总量）
-      const monthlyData = [monthlyTotal];
-
-      // 按类别聚合数据
-      const categoryData: { [key: string]: number } = {};
-
-      // 初始化每个类别的月度数据数组
-      const categoryMonthlyData: { [key: string]: number[] } = {};
-
-      // 按类别聚合数据
-      filteredData.forEach((item) => {
-        // 累加对应类别的月度流量
-        if (!categoryMonthlyData[item.category]) {
-          categoryMonthlyData[item.category] = [0]; // 每个类别只包含一个月的数据
-        }
-        categoryMonthlyData[item.category][0] += item.amount;
-
-        // 按类别累加
-        if (categoryData[item.category]) {
-          categoryData[item.category] += item.amount;
-        } else {
-          categoryData[item.category] = item.amount;
-        }
-      });
-
-      setDailyAmounts(monthlyData); // 重用状态变量，但现在存储的是月度数据
-      setCategoryTotals(categoryData);
-      setCategoryDailyData(categoryMonthlyData); // 重用状态变量，但现在存储的是月度数据
-    } else if (viewMode === "year") {
-      // 年度视图：聚合整个年度的数据，按月显示
+      // 月度视图：按所选年度的月份展示数据，横坐标截止到有数据的月份
       const monthlyData: number[] = Array(12).fill(0); // 一年12个月
       const categoryMonthlyData: { [key: string]: number[] } = {}; // 每个类别按月的数据
 
@@ -168,9 +127,102 @@ const TrafficPage: React.FC = () => {
         }
       });
 
-      setDailyAmounts(monthlyData); // 重用状态变量，存储年度各月数据
+      // 找到最后一个有数据的月份索引
+      let lastMonthWithData = -1;
+      for (let i = 11; i >= 0; i--) {
+        if (monthlyData[i] > 0) {
+          lastMonthWithData = i;
+          break;
+        }
+      }
+
+      // 如果找到了有数据的月份，则截断数组到该月份（包含该月份）
+      let finalMonthlyData = monthlyData;
+      let finalCategoryMonthlyData = categoryMonthlyData;
+
+      if (lastMonthWithData >= 0) {
+        // 截断总数据到有数据的最后月份
+        finalMonthlyData = monthlyData.slice(0, lastMonthWithData + 1);
+
+        // 截断每个类别的数据到有数据的最后月份
+        Object.keys(categoryMonthlyData).forEach((categoryId) => {
+          finalCategoryMonthlyData[categoryId] = categoryMonthlyData[
+            categoryId
+          ].slice(0, lastMonthWithData + 1);
+        });
+      }
+
+      setDailyAmounts(finalMonthlyData); // 存储截断后的月度数据
       setCategoryTotals(categoryData);
-      setCategoryDailyData(categoryMonthlyData); // 存储年度各月数据
+      setCategoryDailyData(finalCategoryMonthlyData); // 存储截断后的类别月度数据
+    } else if (viewMode === "year") {
+      // 年度视图：聚合所有年份的数据，只显示有数据的年份
+      // 首先找出所有有数据的年份
+      const availableYears = new Set<number>();
+      trafficData.forEach((item) => {
+        const [year] = item.date.split("-").map(Number);
+        availableYears.add(year);
+      });
+
+      // 按年份聚合数据
+      const yearlyData: { [key: number]: number } = {};
+      const categoryYearlyData: { [key: string]: { [key: number]: number } } =
+        {};
+      const categoryData: { [key: string]: number } = {};
+
+      trafficData.forEach((item) => {
+        const [yearStr] = item.date.split("-");
+        const yearNum = Number(yearStr);
+
+        // 只处理有数据的年份
+        if (availableYears.has(yearNum)) {
+          // 累加到对应年份
+          if (!yearlyData[yearNum]) {
+            yearlyData[yearNum] = 0;
+          }
+          yearlyData[yearNum] += item.amount;
+
+          // 初始化类别年度数据对象
+          if (!categoryYearlyData[item.category]) {
+            categoryYearlyData[item.category] = {};
+          }
+
+          // 累加对应类别的年度流量
+          if (!categoryYearlyData[item.category][yearNum]) {
+            categoryYearlyData[item.category][yearNum] = 0;
+          }
+          categoryYearlyData[item.category][yearNum] += item.amount;
+
+          // 按类别累加
+          if (categoryData[item.category]) {
+            categoryData[item.category] += item.amount;
+          } else {
+            categoryData[item.category] = item.amount;
+          }
+        }
+      });
+
+      // 将年度数据转换为按年份排序的数组
+      const sortedYears = Array.from(availableYears).sort((a, b) => a - b);
+      const yearlyAmounts: number[] = [];
+      sortedYears.forEach((year) => {
+        yearlyAmounts.push(yearlyData[year] || 0);
+      });
+
+      // 处理每个类别的年度数据
+      const processedCategoryYearlyData: { [key: string]: number[] } = {};
+      Object.keys(categoryYearlyData).forEach((categoryId) => {
+        processedCategoryYearlyData[categoryId] = [];
+        sortedYears.forEach((year) => {
+          processedCategoryYearlyData[categoryId].push(
+            categoryYearlyData[categoryId][year] || 0,
+          );
+        });
+      });
+
+      setDailyAmounts(yearlyAmounts); // 存储年度数据
+      setCategoryTotals(categoryData);
+      setCategoryDailyData(processedCategoryYearlyData); // 存储年度数据
     }
   }, [trafficData, selectedMonth, selectedYear, viewMode]);
 
@@ -225,23 +277,33 @@ const TrafficPage: React.FC = () => {
   // 准备图表数据
   let labels: string[];
   if (viewMode === "month") {
-    labels = [`${selectedYear}年${selectedMonth}月`]; // 单个月份标签
+    // 月度视图：显示所选年度的月份，截止到有数据的月份
+    // 首先找出选定年度的最后一个月份
+    let lastMonthWithData = 0;
+    trafficData.forEach((item) => {
+      const [year, monthStr] = item.date.split("-");
+      const yearNum = Number(year);
+      const monthNum = Number(monthStr);
+
+      if (yearNum === selectedYear && monthNum > lastMonthWithData) {
+        lastMonthWithData = monthNum;
+      }
+    });
+
+    // 生成标签，从1月到有数据的最后月份
+    labels = [];
+    for (let i = 1; i <= lastMonthWithData; i++) {
+      labels.push(`${i}月`);
+    }
   } else {
-    // 年度视图：显示12个月的标签
-    labels = [
-      "1月",
-      "2月",
-      "3月",
-      "4月",
-      "5月",
-      "6月",
-      "7月",
-      "8月",
-      "9月",
-      "10月",
-      "11月",
-      "12月",
-    ];
+    // 年度视图：只显示有数据的年份
+    const availableYears = new Set<number>();
+    trafficData.forEach((item) => {
+      const [year] = item.date.split("-").map(Number);
+      availableYears.add(year);
+    });
+    const sortedYears = Array.from(availableYears).sort((a, b) => a - b);
+    labels = sortedYears.map((year) => `${year}年`);
   }
 
   // 为每个类别和总量准备数据集
@@ -321,7 +383,10 @@ const TrafficPage: React.FC = () => {
       },
       title: {
         display: true,
-        text: `${selectedYear}年${selectedMonth}月流量使用情况`,
+        text:
+          viewMode === "month"
+            ? `${selectedYear}年度月度流量使用情况`
+            : "历年流量使用趋势",
       },
     },
     scales: {
@@ -373,16 +438,21 @@ const TrafficPage: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap gap-4 mb-6">
-        <Select
-          value={String(selectedYear)}
-          onChange={(e) => setSelectedYear(Number(e.target.value))}
-        >
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}年
-            </option>
-          ))}
-        </Select>
+        {viewMode === "month" ? (
+          <Select
+            value={String(selectedYear)}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+          >
+            {years.map((year) => (
+              <option key={year} value={year}>
+                {year}年
+              </option>
+            ))}
+          </Select>
+        ) : (
+          // 在年度视图模式下，不需要年份选择器，因为会显示所有有数据的年份
+          <div className="text-sm text-gray-500">显示有数据的年份</div>
+        )}
 
         {viewMode === "month" && (
           <Select
